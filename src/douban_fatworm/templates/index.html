@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}数据管理 - 豆瓣肥虫{% endblock %}
+{% block content %}
+<section class="toolbar">
+  <div>
+    <h1>作品数据</h1>
+    <p>共 {{ result.total }} 条，支持搜索、筛选、导入和导出。</p>
+  </div>
+  <a class="button primary" href="{{ url_for('main.new_work') }}">新增作品</a>
+</section>
+
+<form class="filters" method="get">
+  <input name="keyword" placeholder="标题 / 作者 / 导演" value="{{ filters.keyword }}">
+  <select name="work_type">
+    <option value="">全部类型</option>
+    <option value="movie" {% if filters.work_type == 'movie' %}selected{% endif %}>电影</option>
+    <option value="book" {% if filters.work_type == 'book' %}selected{% endif %}>图书</option>
+  </select>
+  <input name="min_rating" type="number" min="0" max="10" step="0.1" placeholder="最低评分" value="{{ filters.min_rating }}">
+  <input name="max_rating" type="number" min="0" max="10" step="0.1" placeholder="最高评分" value="{{ filters.max_rating }}">
+  <input name="start_year" type="number" placeholder="起始年份" value="{{ filters.start_year }}">
+  <input name="end_year" type="number" placeholder="结束年份" value="{{ filters.end_year }}">
+  <button class="button" type="submit">筛选</button>
+  <a class="button ghost" href="{{ url_for('main.index') }}">重置</a>
+</form>
+
+<section class="import-export">
+  <form method="post" action="{{ url_for('main.import_data') }}" enctype="multipart/form-data">
+    <input type="file" name="file" accept=".csv">
+    <button class="button" type="submit">导入 CSV</button>
+  </form>
+  <a class="button" href="{{ url_for('main.export_data') }}">导出 CSV</a>
+</section>
+
+{% if result.rows %}
+  <section class="grid">
+    {% for work in result.rows %}
+      <article class="card">
+        {% if work.cover_url %}
+          <img class="cover" src="{{ work.cover_url }}" alt="{{ work.title }}">
+        {% else %}
+          <div class="cover placeholder">{{ work.work_type }}</div>
+        {% endif %}
+        <div class="card-body">
+          <div class="meta">{{ "电影" if work.work_type == "movie" else "图书" }} · {{ work.year or "年份未知" }}</div>
+          <h2>{{ work.title }}</h2>
+          <p>{{ work.creator or "作者/导演未知" }}</p>
+          <div class="score">
+            <strong>{{ work.rating or "暂无" }}</strong>
+            <span>{{ work.rating_count or 0 }} 人评价</span>
+          </div>
+          <p class="tags">{{ work.tags }}</p>
+          <div class="actions">
+            <a href="{{ url_for('main.edit_work', work_id=work.id) }}">编辑</a>
+            {% if work.source_url %}<a href="{{ work.source_url }}" target="_blank" rel="noreferrer">来源</a>{% endif %}
+            <form method="post" action="{{ url_for('main.remove_work', work_id=work.id) }}">
+              <button type="submit">删除</button>
+            </form>
+          </div>
+        </div>
+      </article>
+    {% endfor %}
+  </section>
+  <nav class="pagination">
+    {% if result.page > 1 %}
+      <a href="{{ url_for('main.index', page=result.page - 1, **filters) }}">上一页</a>
+    {% endif %}
+    <span>第 {{ result.page }} / {{ result.pages }} 页</span>
+    {% if result.page < result.pages %}
+      <a href="{{ url_for('main.index', page=result.page + 1, **filters) }}">下一页</a>
+    {% endif %}
+  </nav>
+{% else %}
+  <section class="empty">
+    <h2>暂无数据</h2>
+    <p>可以新增作品、导入 CSV，或从豆瓣公开搜索页爬取数据。</p>
+  </section>
+{% endif %}
+{% endblock %}

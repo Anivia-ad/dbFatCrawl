@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}数据分析 - 豆瓣肥虫{% endblock %}
+{% block content %}
+<section class="toolbar">
+  <div>
+    <h1>数据分析</h1>
+    <p>总量 {{ summary.total }}，平均评分 {{ summary.avg_rating }}，覆盖 {{ summary.years }} 个年份。</p>
+  </div>
+  <a class="button primary" href="{{ url_for('main.report_page') }}">生成报告</a>
+</section>
+
+<section class="metrics">
+  <div><strong>{{ summary.total }}</strong><span>作品数量</span></div>
+  <div><strong>{{ summary.avg_rating }}</strong><span>平均评分</span></div>
+  <div><strong>{{ summary.years }}</strong><span>年份覆盖</span></div>
+</section>
+
+{% if charts %}
+  <section class="charts">
+    {% for name, url in charts.items() %}
+      <figure>
+        <img src="{{ url }}" alt="{{ name }}">
+      </figure>
+    {% endfor %}
+  </section>
+{% else %}
+  <section class="empty"><h2>暂无足够数据生成图表</h2><p>请先新增、导入或爬取作品数据。</p></section>
+{% endif %}
+
+<section class="panel">
+  <h2>高分排行榜</h2>
+  <table>
+    <thead><tr><th>标题</th><th>作者/导演</th><th>年份</th><th>评分</th><th>评价人数</th></tr></thead>
+    <tbody>
+      {% for item in ranking %}
+        <tr><td>{{ item.title }}</td><td>{{ item.creator }}</td><td>{{ item.year or "" }}</td><td>{{ item.rating or "" }}</td><td>{{ item.rating_count or 0 }}</td></tr>
+      {% else %}
+        <tr><td colspan="5">暂无数据</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

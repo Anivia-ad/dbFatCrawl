@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ "编辑" if work else "新增" }}作品 - 豆瓣肥虫{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>{{ "编辑" if work else "新增" }}作品</h1>
+  <form class="work-form" method="post">
+    <label>标题<input name="title" required value="{{ work.title if work else '' }}"></label>
+    <label>类型
+      <select name="work_type">
+        <option value="movie" {% if work and work.work_type == 'movie' %}selected{% endif %}>电影</option>
+        <option value="book" {% if work and work.work_type == 'book' %}selected{% endif %}>图书</option>
+      </select>
+    </label>
+    <label>评分<input name="rating" type="number" min="0" max="10" step="0.1" value="{{ work.rating if work and work.rating is not none else '' }}"></label>
+    <label>评价人数<input name="rating_count" type="number" min="0" value="{{ work.rating_count if work else '' }}"></label>
+    <label>作者/导演<input name="creator" value="{{ work.creator if work else '' }}"></label>
+    <label>年份<input name="year" type="number" value="{{ work.year if work and work.year else '' }}"></label>
+    <label>封面链接<input name="cover_url" value="{{ work.cover_url if work else '' }}"></label>
+    <label>来源链接<input name="source_url" value="{{ work.source_url if work else '' }}"></label>
+    <label>标签<input name="tags" placeholder="剧情, 科幻, 经典" value="{{ work.tags if work else '' }}"></label>
+    <label class="full">简介<textarea name="summary" rows="5">{{ work.summary if work else '' }}</textarea></label>
+    <div class="form-actions">
+      <button class="button primary" type="submit">保存</button>
+      <a class="button ghost" href="{{ url_for('main.index') }}">返回</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+instance/
+uploads/
+exports/
+reports/
+charts/
+src/douban_fatworm/static/generated/
+*.sqlite3
+*.db

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}作品对比 - 豆瓣肥虫{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>作品对比</h1>
+  <form class="compare-form" method="post">
+    <select name="work_ids" multiple size="8">
+      {% for work in works %}
+        <option value="{{ work.id }}">{{ work.title }} · {{ work.creator or "未知" }} · {{ work.year or "未知年份" }}</option>
+      {% endfor %}
+    </select>
+    <button class="button primary" type="submit">对比选中两项</button>
+  </form>
+</section>
+
+{% if selected %}
+  <section class="panel">
+    <h2>对比结果</h2>
+    <table>
+      <thead><tr><th>字段</th>{% for item in selected %}<th>{{ item.title }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for field, label in [("work_type", "类型"), ("creator", "作者/导演"), ("year", "年份"), ("rating", "评分"), ("rating_count", "评价人数"), ("tags", "标签")] %}
+          <tr><td>{{ label }}</td>{% for item in selected %}<td>{{ item[field] or "" }}</td>{% endfor %}</tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}爬取数据 - 豆瓣肥虫{% endblock %}
+{% block content %}
+<section class="panel narrow">
+  <h1>豆瓣公开搜索爬取</h1>
+  <form class="work-form" method="post">
+    <label>关键字<input name="keyword" required placeholder="例如：科幻、村上春树、肖申克"></label>
+    <label>类型
+      <select name="work_type">
+        <option value="movie">电影</option>
+        <option value="book">图书</option>
+      </select>
+    </label>
+    <label>起始年份<input name="start_year" type="number" placeholder="可选"></label>
+    <label>结束年份<input name="end_year" type="number" placeholder="可选"></label>
+    <div class="form-actions">
+      <button class="button primary" type="submit">开始爬取</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

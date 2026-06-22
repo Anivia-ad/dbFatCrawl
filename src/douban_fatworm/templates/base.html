@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}豆瓣肥虫数据分析{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('main.index') }}">豆瓣肥虫</a>
+    <nav class="nav">
+      <a href="{{ url_for('main.index') }}">数据</a>
+      <a href="{{ url_for('main.crawl') }}">爬取</a>
+      <a href="{{ url_for('main.analysis_page') }}">分析</a>
+      <a href="{{ url_for('main.compare_page') }}">对比</a>
+      <a href="{{ url_for('main.report_page') }}">报告</a>
+    </nav>
+  </header>
+  <main class="page">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <section class="messages">
+          {% for category, message in messages %}
+            <div class="message {{ category }}">{{ message }}</div>
+          {% endfor %}
+        </section>
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
