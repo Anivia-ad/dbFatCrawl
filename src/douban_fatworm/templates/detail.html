@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% set type_label = "电影" if work.work_type == "movie" else "图书" %}
+{% block title %}{{ work.title }} - 作品详情 - 豆瓣肥虫{% endblock %}
+{% block content %}
+<section class="toolbar detail-toolbar">
+  <div>
+    <a class="breadcrumb" href="{{ url_for('main.index') }}">返回数据</a>
+    <h1>{{ work.title }}</h1>
+    <p>{{ type_label }} · {{ work.year or "年份未知" }}</p>
+  </div>
+  <div class="form-actions">
+    <a class="button primary" href="{{ url_for('main.edit_work', work_id=work.id) }}">编辑</a>
+    {% if work.source_url %}
+      <a class="button" href="{{ work.source_url }}" target="_blank" rel="noreferrer">打开来源</a>
+    {% endif %}
+  </div>
+</section>
+
+<section class="detail-panel">
+  <div class="detail-media">
+    {% if work.cover_url %}
+      <img class="detail-cover" src="{{ display_cover_url(work.cover_url) }}" alt="{{ work.title }}" referrerpolicy="no-referrer">
+    {% else %}
+      <div class="detail-cover placeholder">{{ work.work_type }}</div>
+    {% endif %}
+  </div>
+
+  <div class="detail-info">
+    <div class="detail-header">
+      <div>
+        <div class="meta">{{ type_label }} · {{ work.year or "年份未知" }}</div>
+        <h2>{{ work.title }}</h2>
+      </div>
+      <div class="score detail-score">
+        <strong>{{ work.rating if work.rating is not none else "暂无" }}</strong>
+        <span>{{ work.rating_count or 0 }} 人评价</span>
+      </div>
+    </div>
+
+    <dl class="detail-fields">
+      <div>
+        <dt>作者/导演</dt>
+        <dd>{{ work.creator or "作者/导演未知" }}</dd>
+      </div>
+      <div>
+        <dt>类型</dt>
+        <dd>{{ type_label }}</dd>
+      </div>
+      <div>
+        <dt>年份</dt>
+        <dd>{{ work.year or "年份未知" }}</dd>
+      </div>
+      <div>
+        <dt>标签</dt>
+        <dd>{{ work.tags or "暂无标签" }}</dd>
+      </div>
+      <div>
+        <dt>创建时间</dt>
+        <dd>{{ work.created_at or "未知" }}</dd>
+      </div>
+      <div>
+        <dt>更新时间</dt>
+        <dd>{{ work.updated_at or "未知" }}</dd>
+      </div>
+      <div class="full">
+        <dt>来源链接</dt>
+        <dd>
+          {% if work.source_url %}
+            <a href="{{ work.source_url }}" target="_blank" rel="noreferrer">{{ work.source_url }}</a>
+          {% else %}
+            暂无来源
+          {% endif %}
+        </dd>
+      </div>
+    </dl>
+
+    <div class="summary-box">
+      <h2>简介</h2>
+      <p>{{ work.summary or "暂无简介。" }}</p>
+    </div>
+
+    <div class="detail-actions">
+      <a class="button ghost" href="{{ url_for('main.index') }}">返回</a>
+      <form method="post" action="{{ url_for('main.refresh_work_detail', work_id=work.id) }}">
+        <button class="button" type="submit">刷新详情</button>
+      </form>
+      <a class="button primary" href="{{ url_for('main.edit_work', work_id=work.id) }}">编辑作品</a>
+      <form method="post" action="{{ url_for('main.remove_work', work_id=work.id) }}" onsubmit="return confirm('确定删除这个作品吗？');">
+        <button class="button danger" type="submit">删除作品</button>
+      </form>
+    </div>
+  </div>
+</section>
+{% endblock %}

@@ -33,34 +33,48 @@
 </section>
 
 {% if result.rows %}
-  <section class="grid">
-    {% for work in result.rows %}
-      <article class="card">
-        {% if work.cover_url %}
-          <img class="cover" src="{{ work.cover_url }}" alt="{{ work.title }}">
-        {% else %}
-          <div class="cover placeholder">{{ work.work_type }}</div>
-        {% endif %}
-        <div class="card-body">
-          <div class="meta">{{ "电影" if work.work_type == "movie" else "图书" }} · {{ work.year or "年份未知" }}</div>
-          <h2>{{ work.title }}</h2>
-          <p>{{ work.creator or "作者/导演未知" }}</p>
-          <div class="score">
-            <strong>{{ work.rating or "暂无" }}</strong>
-            <span>{{ work.rating_count or 0 }} 人评价</span>
-          </div>
-          <p class="tags">{{ work.tags }}</p>
-          <div class="actions">
+  <form class="bulk-delete-form" method="post" action="{{ url_for('main.bulk_delete_works') }}" onsubmit="return confirm('确定删除选中的作品吗？');">
+    <section class="bulk-actions">
+      <span>勾选作品后可批量删除。</span>
+      <button class="button danger" type="submit">删除选中</button>
+    </section>
+    <section class="grid">
+      {% for work in result.rows %}
+        <article class="card selectable-card">
+          <label class="select-work">
+            <input type="checkbox" name="work_ids" value="{{ work.id }}">
+            <span>选择</span>
+          </label>
+          <a class="card-main" href="{{ url_for('main.work_detail', work_id=work.id) }}" aria-label="查看 {{ work.title }} 详情">
+            {% if work.cover_url %}
+              <img class="cover" src="{{ display_cover_url(work.cover_url) }}" alt="{{ work.title }}" loading="lazy" referrerpolicy="no-referrer">
+            {% else %}
+              <div class="cover placeholder">{{ work.work_type }}</div>
+            {% endif %}
+            <div class="card-body">
+              <div class="meta">{{ "电影" if work.work_type == "movie" else "图书" }} · {{ work.year or "年份未知" }}</div>
+              <h2>{{ work.title }}</h2>
+              <p>{{ work.creator or "作者/导演未知" }}</p>
+              <div class="score">
+                <strong>{{ work.rating or "暂无" }}</strong>
+                <span>{{ work.rating_count or 0 }} 人评价</span>
+              </div>
+              <p class="tags">{{ work.tags }}</p>
+            </div>
+          </a>
+          <div class="actions card-actions">
+            <a href="{{ url_for('main.work_detail', work_id=work.id) }}">详情</a>
             <a href="{{ url_for('main.edit_work', work_id=work.id) }}">编辑</a>
             {% if work.source_url %}<a href="{{ work.source_url }}" target="_blank" rel="noreferrer">来源</a>{% endif %}
-            <form method="post" action="{{ url_for('main.remove_work', work_id=work.id) }}">
-              <button type="submit">删除</button>
-            </form>
+            <button class="inline-danger" type="submit" form="delete-work-{{ work.id }}">删除</button>
           </div>
-        </div>
-      </article>
-    {% endfor %}
-  </section>
+        </article>
+      {% endfor %}
+    </section>
+  </form>
+  {% for work in result.rows %}
+    <form id="delete-work-{{ work.id }}" method="post" action="{{ url_for('main.remove_work', work_id=work.id) }}"></form>
+  {% endfor %}
   <nav class="pagination">
     {% if result.page > 1 %}
       <a href="{{ url_for('main.index', page=result.page - 1, **filters) }}">上一页</a>

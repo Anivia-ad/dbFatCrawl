@@ -1,16 +1,27 @@
 from __future__ import annotations
 
+import csv
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
-from flask import Blueprint, current_app, flash, redirect, render_template, request, send_file, url_for
+import requests
+from flask import Blueprint, Response, abort, current_app, flash, redirect, render_template, request, send_file, url_for
 
 from .analysis import build_report, compare, generate_charts, ranking, summarize
-from .crawler import crawl_douban
-from .database import all_works, delete_work, export_csv, get_work, import_csv, query_works, update_work, upsert_work
+from .crawler import crawl_douban, fetch_subject_detail, merge_work_data
+from .database import all_works, delete_work, delete_works, export_csv, get_work, import_csv, query_works, update_work, upsert_work
 
 
 bp = Blueprint("main", __name__)
+
+IMAGE_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+    ),
+    "Referer": "https://movie.douban.com/",
+}
 
 
 @bp.get("/")
@@ -30,6 +41,32 @@ def index():
     return render_template("index.html", result=result, filters=filters)
 
 
+@bp.app_template_global()
+def display_cover_url(cover_url: str) -> str:
+    cover_url = str(cover_url or "")
+    if is_doubanio_image_url(cover_url):
+        return url_for("main.cover_image", url=cover_url)
+    return cover_url
+
+
+@bp.get("/cover")
+def cover_image():
+    cover_url = request.args.get("url", "")
+    if not is_doubanio_image_url(cover_url):
+        abort(404)
+    try:
+        response = requests.get(cover_url, headers=IMAGE_HEADERS, timeout=12)
+        response.raise_for_status()
+    except requests.RequestException:
+        abort(404)
+    content_type = response.headers.get("Content-Type", "image/jpeg").split(";", 1)[0]
+    if not content_type.startswith("image/"):
+        abort(404)
+    proxied = Response(response.content, mimetype=content_type)
+    proxied.headers["Cache-Control"] = "public, max-age=86400"
+    return proxied
+
+
 @bp.route("/works/new", methods=["GET", "POST"])
 def new_work():
     if request.method == "POST":
@@ -40,6 +77,15 @@ def new_work():
         except ValueError as exc:
             flash(str(exc), "error")
     return render_template("form.html", work=None)
+
+
+@bp.get("/works/<int:work_id>")
+def work_detail(work_id: int):
+    work = get_work(current_app.config["DATABASE"], work_id)
+    if not work:
+        flash("作品不存在。", "error")
+        return redirect(url_for("main.index"))
+    return render_template("detail.html", work=work)
 
 
 @bp.route("/works/<int:work_id>/edit", methods=["GET", "POST"])
@@ -58,10 +104,43 @@ def edit_work(work_id: int):
     return render_template("form.html", work=work)
 
 
+@bp.post("/works/<int:work_id>/refresh")
+def refresh_work_detail(work_id: int):
+    work = get_work(current_app.config["DATABASE"], work_id)
+    if not work:
+        flash("作品不存在。", "error")
+        return redirect(url_for("main.index"))
+    if not work["source_url"]:
+        flash("该作品没有来源链接，无法刷新详情。", "error")
+        return redirect(url_for("main.work_detail", work_id=work_id))
+    detail = fetch_subject_detail(work["source_url"], work["work_type"])
+    if not detail:
+        flash("未获取到新的详情信息。", "error")
+        return redirect(url_for("main.work_detail", work_id=work_id))
+    merged = merge_work_data(work_to_dict(work), detail)
+    try:
+        update_work(current_app.config["DATABASE"], work_id, merged)
+        flash("作品详情已刷新。", "success")
+    except ValueError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("main.work_detail", work_id=work_id))
+
+
 @bp.post("/works/<int:work_id>/delete")
 def remove_work(work_id: int):
     delete_work(current_app.config["DATABASE"], work_id)
     flash("作品已删除。", "success")
+    return redirect(url_for("main.index"))
+
+
+@bp.post("/works/bulk-delete")
+def bulk_delete_works():
+    work_ids = sorted({int(value) for value in request.form.getlist("work_ids") if value.isdigit()})
+    if not work_ids:
+        flash("请选择要删除的作品。", "error")
+        return redirect(url_for("main.index"))
+    deleted_count = delete_works(current_app.config["DATABASE"], work_ids)
+    flash(f"已删除 {deleted_count} 个作品。", "success")
     return redirect(url_for("main.index"))
 
 
@@ -72,16 +151,21 @@ def crawl():
         work_type = request.form.get("work_type", "movie")
         start_year = optional_int(request.form.get("start_year"))
         end_year = optional_int(request.form.get("end_year"))
-        result = crawl_douban(keyword, work_type, start_year, end_year)
+        douban_cookie = request.form.get("douban_cookie", "") or current_app.config.get("DOUBAN_COOKIE", "")
+        result = crawl_douban(keyword, work_type, start_year, end_year, douban_cookie)
         if result.error:
             flash(result.error, "error")
         created = updated = 0
+        skipped = 0
         for item in result.items:
-            _, is_created = upsert_work(current_app.config["DATABASE"], item)
-            created += int(is_created)
-            updated += int(not is_created)
+            try:
+                _, is_created = upsert_work(current_app.config["DATABASE"], item)
+                created += int(is_created)
+                updated += int(not is_created)
+            except ValueError:
+                skipped += 1
         if result.items:
-            flash(f"爬取完成：新增 {created} 条，更新 {updated} 条。", "success")
+            flash(f"爬取完成：新增 {created} 条，更新 {updated} 条，跳过 {skipped} 条。", "success")
             return redirect(url_for("main.index"))
     return render_template("crawl.html")
 
@@ -100,7 +184,7 @@ def import_data():
     try:
         stats = import_csv(current_app.config["DATABASE"], path)
         flash(f"导入完成：新增 {stats['created']} 条，更新 {stats['updated']} 条。", "success")
-    except ValueError as exc:
+    except (ValueError, UnicodeDecodeError, csv.Error) as exc:
         flash(str(exc), "error")
     return redirect(url_for("main.index"))
 
@@ -125,7 +209,7 @@ def compare_page():
     rows = all_works(current_app.config["DATABASE"])
     selected = []
     if request.method == "POST":
-        ids = [int(value) for value in request.form.getlist("work_ids")[:2]]
+        ids = [int(value) for value in request.form.getlist("work_ids") if value.isdigit()][:2]
         selected = compare([row for row in rows if row["id"] in ids])
         if len(selected) < 2:
             flash("请选择两部作品进行对比。", "error")
@@ -166,3 +250,14 @@ def has_invalid_numeric_filter(args) -> bool:
         except ValueError:
             return True
     return False
+
+
+def is_doubanio_image_url(url: str) -> bool:
+    parsed = urlparse(str(url or ""))
+    hostname = parsed.hostname or ""
+    return parsed.scheme in {"http", "https"} and (hostname == "doubanio.com" or hostname.endswith(".doubanio.com"))
+
+
+def work_to_dict(work) -> dict:
+    fields = ["title", "work_type", "rating", "rating_count", "creator", "year", "cover_url", "source_url", "tags", "summary"]
+    return {field: work[field] for field in fields}

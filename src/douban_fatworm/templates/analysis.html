@@ -29,13 +29,13 @@
 
 <section class="panel">
   <h2>高分排行榜</h2>
-  <table>
-    <thead><tr><th>标题</th><th>作者/导演</th><th>年份</th><th>评分</th><th>评价人数</th></tr></thead>
+  <table class="ranking-table">
+    <thead><tr><th>标题</th><th>作者/导演</th><th>简介</th><th>年份</th><th>评分</th><th>评价人数</th></tr></thead>
     <tbody>
       {% for item in ranking %}
-        <tr><td>{{ item.title }}</td><td>{{ item.creator }}</td><td>{{ item.year or "" }}</td><td>{{ item.rating or "" }}</td><td>{{ item.rating_count or 0 }}</td></tr>
+        <tr><td>{{ item.title }}</td><td>{{ item.creator }}</td><td class="ranking-summary">{{ item.summary or "" }}</td><td>{{ item.year or "" }}</td><td>{{ item.rating or "" }}</td><td>{{ item.rating_count or 0 }}</td></tr>
       {% else %}
-        <tr><td colspan="5">暂无数据</td></tr>
+        <tr><td colspan="6">暂无数据</td></tr>
       {% endfor %}
     </tbody>
   </table>

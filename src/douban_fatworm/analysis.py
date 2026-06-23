@@ -5,6 +5,7 @@ from base64 import b64encode
 from html import escape
 from pathlib import Path
 from typing import Iterable
+from uuid import uuid4
 
 import matplotlib
 
@@ -51,6 +52,7 @@ def generate_charts(rows: Iterable, chart_dir: str | Path) -> dict[str, str]:
     df = rows_to_frame(rows)
     output_dir = Path(chart_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    run_id = uuid4().hex[:8]
     charts: dict[str, str] = {}
     if df.empty:
         return charts
@@ -61,16 +63,16 @@ def generate_charts(rows: Iterable, chart_dir: str | Path) -> dict[str, str]:
 
     valid_rating = df.dropna(subset=["rating"])
     if not valid_rating.empty:
-        charts["rating_hist"] = save_rating_hist(valid_rating, output_dir)
-        charts["rating_count_scatter"] = save_rating_count_scatter(valid_rating, output_dir)
+        charts["rating_hist"] = save_rating_hist(valid_rating, output_dir, run_id)
+        charts["rating_count_scatter"] = save_rating_count_scatter(valid_rating, output_dir, run_id)
 
     by_year = valid_rating.dropna(subset=["year"])
     if not by_year.empty:
-        charts["year_trend"] = save_year_trend(by_year, output_dir)
+        charts["year_trend"] = save_year_trend(by_year, output_dir, run_id)
 
     tag_text = " ".join(tag for tag, count in collect_tags(df.get("tags", pd.Series(dtype=str)).fillna("").tolist()).items() for _ in range(count))
     if tag_text.strip():
-        charts["wordcloud"] = save_wordcloud(tag_text, output_dir)
+        charts["wordcloud"] = save_wordcloud(tag_text, output_dir, run_id)
 
     return charts
 
@@ -82,7 +84,7 @@ def ranking(rows: Iterable, limit: int = 10) -> list[dict]:
     df["rating"] = pd.to_numeric(df["rating"], errors="coerce")
     df["rating_count"] = pd.to_numeric(df["rating_count"], errors="coerce").fillna(0)
     ranked = df.sort_values(["rating", "rating_count"], ascending=[False, False]).head(limit)
-    return [row_to_dict(row) for _, row in ranked.iterrows()]
+    return [normalize_ranking_item(row_to_dict(row)) for _, row in ranked.iterrows()]
 
 
 def compare(rows: Iterable) -> list[dict]:
@@ -99,6 +101,7 @@ def build_report(rows: Iterable, charts: dict[str, str], output_path: str | Path
         "<tr>"
         f"<td>{escape(str(item.get('title', '') or ''))}</td>"
         f"<td>{escape(str(item.get('creator', '') or ''))}</td>"
+        f"<td>{escape(str(item.get('summary', '') or ''))}</td>"
         f"<td>{escape(str(item.get('year') or ''))}</td>"
         f"<td>{escape(str(item.get('rating') or ''))}</td>"
         f"<td>{escape(str(item.get('rating_count') or 0))}</td>"
@@ -113,8 +116,9 @@ def build_report(rows: Iterable, charts: dict[str, str], output_path: str | Path
   <style>
     body {{ font-family: "Microsoft YaHei", Arial, sans-serif; margin: 32px; color: #1f2937; }}
     img {{ max-width: 720px; display: block; margin: 20px 0; border: 1px solid #d1d5db; }}
-    table {{ border-collapse: collapse; width: 100%; }}
+    table {{ border-collapse: collapse; table-layout: fixed; width: 100%; }}
     th, td {{ border: 1px solid #d1d5db; padding: 8px; text-align: left; }}
+    td:nth-child(3) {{ word-break: break-word; }}
   </style>
 </head>
 <body>
@@ -124,8 +128,8 @@ def build_report(rows: Iterable, charts: dict[str, str], output_path: str | Path
   {chart_html or '<p>暂无足够数据生成图表。</p>'}
   <h2>排行榜</h2>
   <table>
-    <thead><tr><th>标题</th><th>作者/导演</th><th>年份</th><th>评分</th><th>评价人数</th></tr></thead>
-    <tbody>{rank_html or '<tr><td colspan="5">暂无数据</td></tr>'}</tbody>
+    <thead><tr><th>标题</th><th>作者/导演</th><th>简介</th><th>年份</th><th>评分</th><th>评价人数</th></tr></thead>
+    <tbody>{rank_html or '<tr><td colspan="6">暂无数据</td></tr>'}</tbody>
   </table>
 </body>
 </html>
@@ -134,8 +138,8 @@ def build_report(rows: Iterable, charts: dict[str, str], output_path: str | Path
     return output
 
 
-def save_rating_hist(df: pd.DataFrame, output_dir: Path) -> str:
-    path = output_dir / "rating_hist.png"
+def save_rating_hist(df: pd.DataFrame, output_dir: Path, run_id: str) -> str:
+    path = output_dir / f"rating_hist_{run_id}.png"
     plt.figure(figsize=(8, 4.5))
     plt.hist(df["rating"], bins=10, color="#2563eb", edgecolor="white")
     plt.title("评分分布")
@@ -147,8 +151,8 @@ def save_rating_hist(df: pd.DataFrame, output_dir: Path) -> str:
     return str(path)
 
 
-def save_year_trend(df: pd.DataFrame, output_dir: Path) -> str:
-    path = output_dir / "year_trend.png"
+def save_year_trend(df: pd.DataFrame, output_dir: Path, run_id: str) -> str:
+    path = output_dir / f"year_trend_{run_id}.png"
     trend = df.groupby("year")["rating"].mean().sort_index()
     plt.figure(figsize=(8, 4.5))
     plt.plot(trend.index.astype(int), trend.values, marker="o", color="#059669")
@@ -161,8 +165,8 @@ def save_year_trend(df: pd.DataFrame, output_dir: Path) -> str:
     return str(path)
 
 
-def save_rating_count_scatter(df: pd.DataFrame, output_dir: Path) -> str:
-    path = output_dir / "rating_count_scatter.png"
+def save_rating_count_scatter(df: pd.DataFrame, output_dir: Path, run_id: str) -> str:
+    path = output_dir / f"rating_count_scatter_{run_id}.png"
     plt.figure(figsize=(8, 4.5))
     plt.scatter(df["rating_count"], df["rating"], alpha=0.72, color="#dc2626")
     plt.title("评价人数与评分")
@@ -174,8 +178,8 @@ def save_rating_count_scatter(df: pd.DataFrame, output_dir: Path) -> str:
     return str(path)
 
 
-def save_wordcloud(text: str, output_dir: Path) -> str:
-    path = output_dir / "tags_wordcloud.png"
+def save_wordcloud(text: str, output_dir: Path, run_id: str) -> str:
+    path = output_dir / f"tags_wordcloud_{run_id}.png"
     font_path = find_chinese_font()
     cloud = WordCloud(width=900, height=480, background_color="white", font_path=font_path).generate(text)
     cloud.to_file(path)
@@ -198,6 +202,21 @@ def row_to_dict(row) -> dict:
     else:
         data = dict(row)
     return {key: (None if pd.isna(value) else value) for key, value in data.items()}
+
+
+def normalize_ranking_item(item: dict) -> dict:
+    creator = str(item.get("creator") or "").strip()
+    summary = str(item.get("summary") or "").strip()
+    if creator and not summary and looks_like_summary(creator):
+        item["summary"] = creator
+        item["creator"] = ""
+    elif creator and summary == creator and looks_like_summary(creator):
+        item["creator"] = ""
+    return item
+
+
+def looks_like_summary(value: str) -> bool:
+    return len(value) >= 40 or any(mark in value for mark in ("。", "，", "...", "…"))
 
 
 def find_chinese_font() -> str | None:

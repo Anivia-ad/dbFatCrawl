@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 
@@ -7,7 +8,8 @@ BASE_DIR = Path(__file__).resolve().parents[2]
 
 
 class Config:
-    SECRET_KEY = "dev-douban-fatworm"
+    SECRET_KEY = os.environ.get("DOUBAN_FATWORM_SECRET_KEY", "dev-douban-fatworm")
+    DOUBAN_COOKIE = os.environ.get("DOUBAN_COOKIE", "")
     DATABASE = BASE_DIR / "instance" / "douban_fatworm.sqlite3"
     UPLOAD_DIR = BASE_DIR / "uploads"
     EXPORT_DIR = BASE_DIR / "exports"

@@ -4,7 +4,8 @@ import csv
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
+from urllib.parse import urlparse
 
 
 SCHEMA = """
@@ -89,6 +90,9 @@ def normalize_work(data: dict[str, Any]) -> dict[str, Any]:
     if rating_count < 0:
         raise ValueError("评价人数不能为负数")
 
+    cover_url = validate_url(text("cover_url"), "封面链接")
+    source_url = validate_url(text("source_url"), "来源链接")
+
     return {
         "title": title,
         "work_type": work_type,
@@ -96,8 +100,8 @@ def normalize_work(data: dict[str, Any]) -> dict[str, Any]:
         "rating_count": rating_count,
         "creator": text("creator"),
         "year": year,
-        "cover_url": text("cover_url"),
-        "source_url": text("source_url"),
+        "cover_url": cover_url,
+        "source_url": source_url,
         "tags": text("tags"),
         "summary": text("summary"),
     }
@@ -106,19 +110,7 @@ def normalize_work(data: dict[str, Any]) -> dict[str, Any]:
 def upsert_work(db_path: str | Path, data: dict[str, Any]) -> tuple[int, bool]:
     work = normalize_work(data)
     with connect(db_path) as conn:
-        existing = find_duplicate(conn, work)
-        if existing:
-            update_work(db_path, existing["id"], work)
-            return int(existing["id"]), False
-        cursor = conn.execute(
-            """
-            INSERT INTO works
-            (title, work_type, rating, rating_count, creator, year, cover_url, source_url, tags, summary)
-            VALUES (:title, :work_type, :rating, :rating_count, :creator, :year, :cover_url, :source_url, :tags, :summary)
-            """,
-            work,
-        )
-        return int(cursor.lastrowid), True
+        return upsert_normalized(conn, work)
 
 
 def find_duplicate(conn: sqlite3.Connection, work: dict[str, Any]) -> sqlite3.Row | None:
@@ -138,26 +130,55 @@ def find_duplicate(conn: sqlite3.Connection, work: dict[str, Any]) -> sqlite3.Ro
 
 def update_work(db_path: str | Path, work_id: int, data: dict[str, Any]) -> None:
     work = normalize_work(data)
-    work["id"] = work_id
     with connect(db_path) as conn:
-        try:
-            conn.execute(
-                """
-                UPDATE works
-                SET title = :title, work_type = :work_type, rating = :rating, rating_count = :rating_count,
-                    creator = :creator, year = :year, cover_url = :cover_url, source_url = :source_url,
-                    tags = :tags, summary = :summary, updated_at = CURRENT_TIMESTAMP
-                WHERE id = :id
-                """,
-                work,
-            )
-        except sqlite3.IntegrityError as exc:
-            raise ValueError("该作品与已有数据重复") from exc
+        update_normalized(conn, work_id, work)
+
+
+def upsert_normalized(conn: sqlite3.Connection, work: dict[str, Any]) -> tuple[int, bool]:
+    existing = find_duplicate(conn, work)
+    if existing:
+        update_normalized(conn, int(existing["id"]), work)
+        return int(existing["id"]), False
+    cursor = conn.execute(
+        """
+        INSERT INTO works
+        (title, work_type, rating, rating_count, creator, year, cover_url, source_url, tags, summary)
+        VALUES (:title, :work_type, :rating, :rating_count, :creator, :year, :cover_url, :source_url, :tags, :summary)
+        """,
+        work,
+    )
+    return int(cursor.lastrowid), True
+
+
+def update_normalized(conn: sqlite3.Connection, work_id: int, work: dict[str, Any]) -> None:
+    payload = {**work, "id": work_id}
+    try:
+        conn.execute(
+            """
+            UPDATE works
+            SET title = :title, work_type = :work_type, rating = :rating, rating_count = :rating_count,
+                creator = :creator, year = :year, cover_url = :cover_url, source_url = :source_url,
+                tags = :tags, summary = :summary, updated_at = CURRENT_TIMESTAMP
+            WHERE id = :id
+            """,
+            payload,
+        )
+    except sqlite3.IntegrityError as exc:
+        raise ValueError("该作品与已有数据重复") from exc
 
 
 def delete_work(db_path: str | Path, work_id: int) -> None:
+    delete_works(db_path, [work_id])
+
+
+def delete_works(db_path: str | Path, work_ids: Iterable[int]) -> int:
+    ids = sorted({int(work_id) for work_id in work_ids})
+    if not ids:
+        return 0
+    placeholders = ",".join("?" for _ in ids)
     with connect(db_path) as conn:
-        conn.execute("DELETE FROM works WHERE id = ?", (work_id,))
+        cursor = conn.execute(f"DELETE FROM works WHERE id IN ({placeholders})", ids)
+        return int(cursor.rowcount)
 
 
 def get_work(db_path: str | Path, work_id: int) -> sqlite3.Row | None:
@@ -219,8 +240,11 @@ def import_csv(db_path: str | Path, csv_path: str | Path) -> dict[str, int]:
         reader = csv.DictReader(file)
         if not reader.fieldnames or not required.issubset(set(reader.fieldnames)):
             raise ValueError("CSV 至少需要 title 和 work_type 列")
-        for row in reader:
-            _, is_created = upsert_work(db_path, row)
+        works = [normalize_work(row) for row in reader]
+
+    with connect(db_path) as conn:
+        for work in works:
+            _, is_created = upsert_normalized(conn, work)
             if is_created:
                 created += 1
             else:
@@ -247,7 +271,7 @@ def export_csv(db_path: str | Path, output_path: str | Path) -> Path:
     ]
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
-    with output.open("w", newline="", encoding="utf-8") as file:
+    with output.open("w", newline="", encoding="utf-8-sig") as file:
         writer = csv.DictWriter(file, fieldnames=fieldnames)
         writer.writeheader()
         for row in rows:
@@ -271,3 +295,12 @@ def safe_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def validate_url(value: str, field_name: str) -> str:
+    if not value:
+        return ""
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError(f"{field_name}只支持 http 或 https 链接")
+    return value

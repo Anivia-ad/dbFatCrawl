@@ -1,14 +1,60 @@
-.venv/
+# Python bytecode and caches
 __pycache__/
 *.py[cod]
+*$py.class
 .pytest_cache/
+.pytest-tmp/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+
+# Virtual environments and local package caches
+.venv/
+venv/
+env/
+.uv-cache/
+
+# Build and coverage output
+build/
+dist/
+*.egg-info/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
+
+# Local app data and generated artifacts
 instance/
 uploads/
 exports/
 reports/
 charts/
 src/douban_fatworm/static/generated/
+*.sqlite
 *.sqlite3
+*.sqlite3-*
 *.db
+*.db-*
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local agent/ workspace state
+_bmad-output/
+_bmad/
+.agents/
+.claude/
